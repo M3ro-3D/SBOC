@@ -35,14 +35,14 @@ SBOC. runs on a **controller** (the device hosting the web interface) and option
 
 ### 1. Download and install
 
-On the device you want to set up, open a terminal or connect via SSH. These commands download the public **v0.2.33** release directly from GitHub:
+On the device you want to set up, open a terminal or connect via SSH. These commands download the **v0.2.34** release from GitHub **once its release archive has been published**:
 
 ```bash
 cd ~
-curl -fL --retry 3 -o SBOC-0.2.33-stable.tar.gz \
-  https://github.com/M3ro-3D/SBOC/releases/download/v0.2.33/SBOC-0.2.33-stable.tar.gz
+curl -fL --retry 3 -o SBOC-0.2.34-stable.tar.gz \
+  https://github.com/M3ro-3D/SBOC/releases/download/v0.2.34/SBOC-0.2.34-stable.tar.gz
 mkdir -p ~/sboc
-tar -xzf ~/SBOC-0.2.33-stable.tar.gz -C ~/sboc
+tar -xzf ~/SBOC-0.2.34-stable.tar.gz -C ~/sboc
 cd ~/sboc
 sudo ./install.sh
 ```
@@ -70,7 +70,7 @@ For a fresh controller installation, continue with [First-time administrator set
 
 ### Updating an existing installation
 
-Download the new release archive from [GitHub Releases](https://github.com/M3ro-3D/SBOC/releases), extract it into your existing `~/sboc` directory, and run `sudo ./install.sh` again. Use the **actual filename and version** of the new release; the example above intentionally points to v0.2.33 and is not an automatic updater.
+Download the new release archive from [GitHub Releases](https://github.com/M3ro-3D/SBOC/releases), extract it into your existing `~/sboc` directory, and run `sudo ./install.sh` again. Use the **actual filename and version** of the new release; the example above points to v0.2.34 and works only after the corresponding GitHub Release asset has been uploaded; it is not an automatic updater.
 
 The installer detects the existing role from its systemd service, replaces application code and preserves runtime configuration and data in `/var/lib/sboc/` (controller) and `/var/lib/sboc-agent/` (agent). You do not need to create a new administrator account or pair agents again for a normal update.
 

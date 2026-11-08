@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.34 — SMTP diagnostics and validation (2026-11-08)
+
+- Validate complete sender and recipient email addresses before saving SMTP settings or sending mail.
+- Rename the sender field to “Sender email address” / “Absender-E-Mail-Adresse”.
+- Show actionable SMTP test errors for authentication, rejected addresses, connection, timeout and TLS failures without exposing credentials.
+- Correct the LED socket integration test to work without root privileges in GitHub Actions.
+
+
 ## 0.2.33 — First stable public release (2026-11-08)
 
 - Centralized monitoring for Linux single-board computers, with paired agents, a web dashboard, and optional Home Assistant integration.
