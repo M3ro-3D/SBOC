@@ -4,6 +4,15 @@ SBOC. monitors Linux single-board computers from a central controller. It provid
 
 > **LAN-only software.** SBOC. is intended for trusted local networks, not direct Internet exposure. Read [SECURITY.md](SECURITY.md) before installing.
 
+## Features
+
+- Monitor CPU temperature, CPU usage, memory, and availability across Linux devices.
+- View device status in the browser and optionally on SK6812 RGBW LED strips.
+- Connect Home Assistant OS for system metrics.
+- Receive notifications by email using SMTP.
+- Pair Linux agents with the controller using encrypted communication.
+- Choose English or German in per-account user settings.
+
 ## Architecture
 
 - **Controller:** Python HTTP server, web UI, monitoring, email alerts; TCP port **8088**.
@@ -22,12 +31,16 @@ SBOC. monitors Linux single-board computers from a central controller. It provid
 
 ## Installation
 
-Download a reviewed release archive, extract it, then run:
+Download the `SBOC-0.2.33-stable.tar.gz` archive from the [latest release](https://github.com/M3ro-3D/SBOC/releases/latest) and copy it to your device. Then extract and install it:
 
 ```bash
-cd sboc
+mkdir -p ~/sboc
+tar -xzf ~/SBOC-0.2.33-stable.tar.gz -C ~/sboc
+cd ~/sboc
 sudo ./install.sh
 ```
+
+For later releases, use the archive filename of that release. The commands above are for version 0.2.33.
 
 The installer detects an existing controller or agent by installed systemd unit files. On a new device, it asks for the role. A normal application update does **not** require rebooting.
 
@@ -35,11 +48,36 @@ Controller UI: `http://<controller-ip>:8088` (local/trusted network only).
 
 **Important:** The controller web server runs as the restricted `sboc-web` user. On a Raspberry Pi 3B, a separate LED-only service (`sboc-led`) runs as root to control SK6812 hardware. The web interface uses HTTP. Do not expose it to untrusted networks; see [SECURITY.md](SECURITY.md).
 
+## First-time administrator setup
+
+On a **new controller installation**, run `sudo sboc-setup-code` via SSH on the controller to obtain the one-time administrator setup code. Enter it when creating the first account. The code is removed after successful setup. **Existing accounts and sessions are preserved on upgrades.**
+
+## Secure Agent Pairing
+
+The six-digit code is temporary and is not a permanent access token. Do not share it publicly.
+
+1. Install SBOC. on the controller and agent devices.
+2. Run `sudo sboc-pairing-code` via SSH on each agent.
+3. In the controller, open **Set Up Devices** and select **Pair** for an existing agent, or add a discovered agent.
+4. Enter the six-digit pairing code and save the changes. The pairing key persists across restarts.
+
+Pairing an agent again replaces its previous controller key. To switch controllers, pair the agent again. Home Assistant OS devices do not require an agent pairing code; they continue to use the Home Assistant access token.
+
+**Security boundary:** Agent telemetry is protected using AES-GCM. The SBOC web interface and HTTP connections to Home Assistant remain unencrypted. See [SECURITY.md](SECURITY.md) for details.
+
 ## Configuration and data
 
 Runtime configuration and the event database live under `/var/lib/sboc/`. Do not upload them to GitHub. Home Assistant access tokens and SMTP credentials may be stored in those files. The installer preserves existing data on updates.
 
 The Home Assistant URL is entered with scheme and port, for example `http://homeassistant.local:8123`. Create a long-lived access token under **Home Assistant → User profile → Security**. See the [official Home Assistant authentication instructions](https://www.home-assistant.io/docs/authentication/).
+
+Agent and Home Assistant connections are restricted to validated local-network destinations. Redirects and proxies are disabled for those connections. See [SECURITY.md](SECURITY.md) for the limitations.
+
+## Interface languages and account settings
+
+SBOC. is available in **English and German**. English is the default interface language. Signed-in users can switch between **English** and **Deutsch** under **User Settings → Language**. The preference is stored per account and is retained across sessions.
+
+The **User Settings → Change password** form requires the current password and a matching new password of 12–256 characters. Changing the password invalidates the account's existing sessions; sign in again with the new password. Agent pairing is not affected.
 
 ## Updates and service commands
 
@@ -52,18 +90,6 @@ sudo systemctl restart sboc-agent
 ```
 
 Agent service/container discovery refreshes when the agent service restarts.
-
-## ☕ Powered by Coffee
-
-Some projects run on electricity. Mine run on coffee. ☕
-
-Coffee is my fuel, and quite a few cups have already gone into building SBOC.
-
-If you enjoy this project and would like to keep the caffeine flowing, I'd be happy about a little contribution to my coffee fund.
-
-[![Buy Me a Coffee](https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png)](https://buymeacoffee.com/m3ro)
-
-*No pressure, just coffee. ❤️*
 
 ## Project status
 
@@ -115,32 +141,15 @@ Use it if you find it useful. Don't use it if you don't — whether because it d
 
 **Either way, I wanted you to know how SBOC. came to be, what went into making it, and who's behind the decisions. The rest is up to you. Make your own judgment.**
 
-## First-time administrator setup
+## ☕ Powered by Coffee
 
-On a **new controller installation**, run `sudo sboc-setup-code` via SSH on the controller to obtain the one-time administrator setup code. Enter it when creating the first account. The code is removed after successful setup. **Existing accounts and sessions are preserved on upgrades.**
+Some projects run on electricity. Mine run on coffee. ☕
 
-Agent and Home Assistant connections are restricted to validated local-network destinations. Redirects and proxies are disabled for those connections. See [SECURITY.md](SECURITY.md) for the limitations.
+Coffee is my fuel, and quite a few cups have already gone into building SBOC.
 
-## Secure Agent Pairing
+If you enjoy this project and would like to keep the caffeine flowing, I'd be happy about a little contribution to my coffee fund.
 
-The six-digit code is temporary and is not a permanent access token. Do not share it publicly.
+[![Buy Me a Coffee](https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png)](https://buymeacoffee.com/m3ro)
 
-1. Install SBOC. on the controller and agent devices.
-2. Run `sudo sboc-pairing-code` via SSH on each agent.
-3. In the controller, open **Set Up Devices** and select **Pair** for an existing agent, or add a discovered agent.
-4. Enter the six-digit pairing code and save the changes. The pairing key persists across restarts.
+*No pressure, just coffee. ❤️*
 
-Pairing an agent again replaces its previous controller key. To switch controllers, pair the agent again. Home Assistant OS devices do not require an agent pairing code; they continue to use the Home Assistant access token.
-
-**Security boundary:** Agent telemetry is protected using AES-GCM. The SBOC web interface and HTTP connections to Home Assistant remain unencrypted. See [SECURITY.md](SECURITY.md) for details.
-
-## Interface languages and account settings
-
-SBOC. is available in **English and German**. English is the default interface language. Signed-in users can switch between **English** and **Deutsch** under **User Settings → Language**. The preference is stored per account and is retained across sessions.
-
-The **User Settings → Change password** form requires the current password and a matching new password of 12–256 characters. Changing the password invalidates the account's existing sessions; sign in again with the new password. Agent pairing is not affected.
-
-
-### UI localization requirement
-
-All future UI changes must provide complete English and German text, including dynamic messages, dialogs, help text, and accessibility labels. Both languages must be checked before release.
