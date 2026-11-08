@@ -33,16 +33,20 @@ class TestLEDService(unittest.TestCase):
     def test_socket_protocol(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = str(Path(tmp) / 'led.sock')
-            # Daemon thread is intentionally allowed to end with test process.
-            with patch('sboc.led_service.LEDs', FakeLEDs):
+            # The test runs unprivileged; only the privileged ownership operation is mocked.
+            with patch('sboc.led_service.LEDs', FakeLEDs), patch('sboc.led_service.os.chown') as chown:
                 group = grp.getgrgid(os.getgid()).gr_name
                 threading.Thread(target=serve, args=(path, group), daemon=True).start()
+                client = None
                 for _ in range(100):
                     if Path(path).exists():
-                        break
+                        client = LEDClient(path)
+                        if client.available:
+                            break
                     time.sleep(.01)
-                client = LEDClient(path)
-                self.assertTrue(client.available)
+                self.assertIsNotNone(client, 'LED socket was not created')
+                self.assertTrue(client.available, client.error)
+                chown.assert_called_once_with(Path(path), 0, os.getgid())
                 pixels = [[[12, 34, 56, 78] for _ in range(10)] for _ in range(2)]
                 client.show(pixels)
                 self.assertTrue(client.available)
