@@ -1,0 +1,23 @@
+name: Basic checks
+on:
+  push:
+  pull_request:
+jobs:
+  syntax:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check Python syntax
+        run: |
+          python - <<'PY'
+          import pathlib
+          for file in pathlib.Path('sboc').rglob('*.py'):
+              compile(file.read_text(encoding='utf-8'), str(file), 'exec')
+          print('Python syntax OK')
+          PY
+      - name: Check installer shell syntax
+        run: bash -n install.sh
+      - name: Install test dependency
+        run: python -m pip install 'cryptography>=41,<47'
+      - name: Run security and web integration tests
+        run: python -m unittest discover -s tests -v

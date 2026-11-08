@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+# Secrets and runtime data
+.env
+.env.*
+!.env.example
+config.json
+*.sqlite3
+*.sqlite3-*
+*.db
+*.pem
+*.key
+*.p12
+*.pfx
+*.log
+*.bak
+*.backup
+# Editor / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+# Releases
+*.tar.gz
+*.zip
+# SQLite journals and alternate local state
+*.sqlite
+*.sqlite-*
+*.sqlite3-shm
+*.sqlite3-wal
+*.db-*
+*.json.local
+*.secrets.json
+# Locally generated secrets / credentials
+*.token
+*.secret
+*.credentials
