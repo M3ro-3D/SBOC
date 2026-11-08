@@ -31,22 +31,50 @@ SBOC. monitors Linux single-board computers from a central controller. It provid
 
 ## Installation
 
-Download the `SBOC-0.2.33-stable.tar.gz` archive from the [latest release](https://github.com/M3ro-3D/SBOC/releases/latest) and copy it to your device. Then extract and install it:
+SBOC. runs on a **controller** (the device hosting the web interface) and optional **agents** (Linux devices to monitor). Install the same release package on each device, then choose its role when prompted. **No GitHub account, Git, or GitHub CLI is required.**
+
+### 1. Download and install
+
+On the device you want to set up, open a terminal or connect via SSH. These commands download the public **v0.2.33** release directly from GitHub:
 
 ```bash
+cd ~
+curl -fL --retry 3 -o SBOC-0.2.33-stable.tar.gz \
+  https://github.com/M3ro-3D/SBOC/releases/download/v0.2.33/SBOC-0.2.33-stable.tar.gz
 mkdir -p ~/sboc
 tar -xzf ~/SBOC-0.2.33-stable.tar.gz -C ~/sboc
 cd ~/sboc
 sudo ./install.sh
 ```
 
-For later releases, use the archive filename of that release. The commands above are for version 0.2.33.
+If `curl` is not installed, install it using your distribution's package manager first (for example, `sudo apt install curl` on Debian-based systems).
 
-The installer detects an existing controller or agent by installed systemd unit files. On a new device, it asks for the role. A normal application update does **not** require rebooting.
+**Select the role when the installer asks:**
 
-Controller UI: `http://<controller-ip>:8088` (local/trusted network only).
+- **1 — Controller:** web interface, monitoring and optional LEDs. The installer also installs a local agent on the controller.
+- **2 — Agent:** monitoring service for a separate Linux device; no web interface on that device.
 
-**Important:** The controller web server runs as the restricted `sboc-web` user. On a Raspberry Pi 3B, a separate LED-only service (`sboc-led`) runs as root to control SK6812 hardware. The web interface uses HTTP. Do not expose it to untrusted networks; see [SECURITY.md](SECURITY.md).
+The installer uses `apt` to install missing dependencies on Debian-based systems and may need Internet access for dependencies or fonts. The LED driver is installed when supported Raspberry Pi 3 Model B hardware is detected. Other controller hardware uses simulated LEDs. The installer creates and starts systemd services; a normal installation or update does not require a reboot.
+
+### 2. Open the controller interface
+
+On another device on the **same trusted local network**, open:
+
+`http://<controller-ip>:8088`
+
+The installer prints the controller URL when it finishes. If you need to find the IP address later, run `hostname -I` on the controller. Do not forward port 8088 to the Internet: the web interface uses **unencrypted HTTP**.
+
+### 3. Set up the administrator and connect devices
+
+For a fresh controller installation, continue with [First-time administrator setup](#first-time-administrator-setup). To connect separate Linux agents, follow [Secure Agent Pairing](#secure-agent-pairing). Home Assistant OS uses its API instead of a Linux agent; see [Configuration and data](#configuration-and-data).
+
+### Updating an existing installation
+
+Download the new release archive from [GitHub Releases](https://github.com/M3ro-3D/SBOC/releases), extract it into your existing `~/sboc` directory, and run `sudo ./install.sh` again. Use the **actual filename and version** of the new release; the example above intentionally points to v0.2.33 and is not an automatic updater.
+
+The installer detects the existing role from its systemd service, replaces application code and preserves runtime configuration and data in `/var/lib/sboc/` (controller) and `/var/lib/sboc-agent/` (agent). You do not need to create a new administrator account or pair agents again for a normal update.
+
+**Security note:** The controller web process runs as the restricted `sboc-web` user. On supported Raspberry Pi 3B LED hardware, a separate privileged `sboc-led` service controls the LEDs. Agent telemetry is encrypted after pairing, but the browser connection is not. See [SECURITY.md](SECURITY.md) for the network trust boundaries.
 
 ## First-time administrator setup
 
