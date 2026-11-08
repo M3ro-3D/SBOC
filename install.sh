@@ -3,7 +3,7 @@ set -Eeuo pipefail
 if [[ $EUID -ne 0 ]]; then echo 'Bitte mit sudo ausführen.'; exit 1; fi
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 [[ -f "$ROOT/sboc/agent.py" ]] || { echo 'Paket unvollständig'; exit 1; }
-printf '\nSBOC. 0.2.33 Stable\n'
+printf '\nSBOC. 0.2.34 Stable\n'
 CONTROLLER_INSTALLED=0
 AGENT_INSTALLED=0
 if [[ -f /etc/systemd/system/sboc-controller.service ]]; then CONTROLLER_INSTALLED=1; fi
