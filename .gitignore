@@ -41,3 +41,6 @@ Thumbs.db
 *.token
 *.secret
 *.credentials
+
+# Schriftarten werden vom Installer heruntergeladen
+/sboc/assets/fonts/
