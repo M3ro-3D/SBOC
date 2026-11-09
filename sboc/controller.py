@@ -273,10 +273,19 @@ class Controller:
                 send_mail(settings,('SBOC.: ' + ('Warnung: ' if alert['active'] else 'Entwarnung: ')+alert['kind']+' auf '+alert['device']),f"Gerät: {alert['device']}\nStörung: {alert['kind']}\nZeitpunkt: {time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(alert['since']))}")
                 self.store.notified(alert['device'],alert['kind'])
             except Exception as exc: print('SMTP-Versand fehlgeschlagen:',str(exc),flush=True)
+    def active_alarm_rows(self):
+        with self.lock:
+            cfg=copy.deepcopy(self.cfg)
+        result=[]
+        for alarm in self.store.alerts():
+            if not alarm['active']: continue
+            rows=[i+1 for i,item in enumerate(cfg['mapping']) if item and alarm['device'] in (item['left_device'],item['right_device'])]
+            result.append(dict(alarm,rows=rows,silent_trigger=bool(cfg['silent']['enabled'] and rows and not alarm['acknowledged'] and time.time()-alarm['since']>=cfg['silent']['delay'])))
+        return result
     def critical(self,device,delay):
         now=time.time()
         for a in self.store.alerts():
-            if a['device']==device and a['active'] and now-a['since']>=delay: return True
+            if a['device']==device and a['active'] and not a['acknowledged'] and now-a['since']>=delay: return True
         return False
     def test_pixels(self, elapsed, effect='reactor'):
         """All effects operate on logical rows, so the two sides remain synchronized."""
@@ -384,7 +393,7 @@ class Controller:
         with self.lock:
             return {'config':self.public_config(),'metrics':copy.deepcopy(self.data),'failed':dict(self.failed),
                     'last_poll':self.last_poll,'led_available':self.leds.available,'led_error':self.leds.error,
-                    'test_running':self.test_started is not None,'configured':self.store.configured()}
+                    'test_running':self.test_started is not None,'configured':self.store.configured(),'active_alarms':self.active_alarm_rows()}
 
 HTML='''<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>SBOC.</title><link rel="icon" type="image/png" href="/assets/m3ro-favicon.png"><style>
 :root{--bg:#f7f7f3;--ink:#111;--line:#999999;--inner-line:#dddddd;--muted:#62625d}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:14px system-ui,sans-serif}header{background:white;border-bottom:1px solid var(--line);position:relative;z-index:5}.head{max-width:1150px;margin:auto;padding:15px 22px;display:flex;align-items:center;gap:20px;flex-wrap:wrap}.brand{font-weight:800;font-size:25px;margin-right:auto}.brand small{font-size:12px;font-weight:400;color:var(--muted)}button,input,select{font:inherit}button{background:#111;color:white;border:1px solid #111;padding:10px 15px;cursor:pointer;font-weight:600}button.secondary{background:white;color:#111}button:disabled{opacity:.4}input,select{border:1px solid #aaa;padding:10px;max-width:100%;background:white;color:#111}input[type=color]{width:56px;height:40px;padding:3px}input[type=range]{accent-color:#111}nav{display:flex;gap:10px;max-width:1150px;margin:auto;padding:0 22px}nav button{background:transparent;color:#555;border:0;border-bottom:3px solid transparent}nav button.active{color:#111;border-bottom-color:var(--flow-line)}main{max-width:1150px;margin:30px auto;padding:0 22px 90px}.page{display:none}.page.active{display:block}h1{font-size:30px;margin:0 0 8px}h2{font-size:19px;margin:0 0 12px}h3{font-size:15px;margin:12px 0}.muted{color:var(--muted);line-height:1.5}[hidden]{display:none!important}section{background:white;border:1px solid var(--line);padding:24px;margin:22px 0;scroll-margin-top:125px}.row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}.field{display:flex;flex-direction:column;gap:6px;font-size:13px;font-weight:600}.field input,.field select{min-width:140px}.device-row{display:flex;align-items:center;gap:15px;justify-content:space-between;border-bottom:1px solid #ddd;padding:13px 0;flex-wrap:wrap}.device-row:last-child{border:0}.device-info{flex:1;min-width:180px}.device-info small{display:block;color:var(--muted);margin-top:5px}.steps{position:fixed;right:16px;top:50%;transform:translateY(-50%);background:white;border:1px solid #bbb;z-index:4;display:none;padding:8px;box-shadow:0 5px 20px #0001}.steps a{display:block;color:#111;text-decoration:none;padding:10px 8px;font-size:12px}.steps a:hover{background:#eee}body.config-mode .steps{display:block}.shell{display:grid;grid-template-columns:minmax(240px,420px) minmax(280px,1fr);gap:22px;align-items:start}.case{background:#ededeb;border:1px solid #ccc;border-radius:12px;padding:15px}.case svg{display:block;width:100%;height:auto}.led-cell{cursor:pointer;outline:none}.led-cell:focus .led-outline,.led-cell:hover .led-outline{stroke:#fff;stroke-width:3}.led-cell.selected .led-outline{stroke:#111;stroke-width:3}.panel{border:1px solid var(--inner-line);padding:18px;background:#fafaf8;display:grid;gap:12px}.panel .field select{width:100%}.notice{position:fixed;bottom:12px;left:50%;transform:translateX(-50%);background:white;border:1px solid #111;padding:12px 18px;z-index:8;display:none}.notice:not(:empty){display:block}.notice.error{color:#a00;border-color:#a00}.pill{background:#eee;padding:4px 9px;font-size:12px}.checks{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px}.checks label{padding:9px;border:1px solid #ddd}.formgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin:14px 0}.formgrid .field input,.formgrid .field select{width:100%}@media(max-width:850px){.shell{grid-template-columns:1fr}.steps{right:0;top:auto;bottom:0;transform:none;display:none!important}body.config-mode .steps{display:flex!important;left:0;overflow:auto;justify-content:space-around}.steps a{white-space:nowrap}main{padding-bottom:125px}section{padding:16px}.brand{font-size:20px}}
@@ -468,9 +477,46 @@ body:has(.sboc-footer){min-height:100vh;min-height:100dvh;display:flex;flex-dire
 body:has(.sboc-footer)>main{flex:1 0 auto;width:100%;margin-bottom:0}
 body:has(#page-status.active)>main{padding-bottom:0}
 .sboc-footer{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:12px 0 14px;flex-shrink:0}.sboc-footer img{width:64px;height:auto;object-fit:contain}.sboc-version{font-size:12px;color:#888}.steps a.focused{border-left:3px solid var(--flow-line);padding-left:7px;font-weight:700}
-.head .brand{font-size:42px;font-weight:800;line-height:1.15}.head #logout{font-size:12px;padding:6px 10px;min-height:32px}@media(max-width:600px){.head .brand{font-size:29px}}</style></head><body><header><div class="head"><span id="state" class="muted">Verbinde …</span><div class="brand">SBOC.</div><button class="secondary" id="logout">Abmelden</button></div><nav><button class="active" data-page="status">Status</button><button data-page="config">Konfiguration</button><button data-page="settings">Benutzereinstellungen</button></nav></header><div class="flow-bridge" id="flowBridge" aria-hidden="true"><div class="flow-bridge-stem" id="flowBridgeStem"></div></div>
+.head .brand{font-size:42px;font-weight:800;line-height:1.15}.head #logout{font-size:12px;padding:6px 10px;min-height:32px}
+/* Mobile: compact header, compact save action and clear active section. */
+@media(max-width:600px){
+ html{scrollbar-gutter:auto}
+ .head{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:8px;padding:12px 14px;align-items:center}
+ .head #state{grid-column:1;grid-row:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px}
+ .head .brand{grid-column:2;grid-row:1;font-size:25px;line-height:1.1}
+ .head #logout{grid-column:3;grid-row:1;font-size:11px;padding:7px 9px;min-height:34px;white-space:nowrap}
+ body.config-mode .steps{display:flex!important;align-items:center;justify-content:flex-start;gap:2px;padding:7px 9px;overflow-x:auto;overflow-y:hidden;min-width:0;max-width:100%;border-width:1px;background:var(--bg);scrollbar-width:thin}
+ .steps a{flex:0 0 auto;padding:10px 9px;font-size:13px;line-height:1.2;border:0;border-bottom:3px solid transparent}
+ .steps a.focused{padding:10px 9px;border:0;border-bottom:3px solid #111;font-weight:700}
+ .steps .save-all{position:sticky;right:0;flex:0 0 auto;width:auto;margin:0 0 0 auto;min-height:36px;padding:7px 10px;font-size:12px;white-space:nowrap;z-index:2}
+ .steps #dirtyIndicator{display:none}
+ body.config-mode main{padding-bottom:85px}
+}
+@media(max-width:380px){
+ .head{gap:6px;padding:10px 9px}
+ .head #state{font-size:10px}
+ .head .brand{font-size:22px}
+ .head #logout{padding:6px 7px}
+}
+/* Mobile LED editor: viewport anchored, never changes the rack geometry. */
+@media(max-width:850px){
+ #ledSection .shell{display:block;min-width:0}
+ #ledSection .case{position:relative;width:100%;max-width:none;margin:0;padding:8px;overflow:visible}
+ #ledSection .case svg{width:100%;max-width:560px;margin:auto}
+ #ledSection .panel.mobile-led-editor{position:fixed;z-index:120;left:12px;right:12px;top:12px;width:auto;max-height:calc(100dvh - 24px);overflow-y:auto;overscroll-behavior:contain;box-shadow:0 12px 36px #0007;border:2px solid #222;padding:12px;background:#fafaf8;gap:8px}
+ #ledSection .panel.mobile-led-editor[hidden]{display:none!important}
+ #ledSection .panel.mobile-led-editor .field{gap:3px}
+ #ledSection .panel.mobile-led-editor .field select{min-width:0;width:100%;height:38px}
+ #ledSection .panel.mobile-led-editor .field input[type=color]{height:36px}
+ #ledSection .panel.mobile-led-editor #selectedTitle{margin:0;padding-right:80px}
+ #ledSection .led-editor-close{position:sticky;float:right;right:0;top:0;z-index:1;min-height:32px;padding:4px 9px;font-size:12px}
+ #ledSection .led-editor-backdrop{position:fixed;inset:0;z-index:119;background:#0005}
+ #ledSection .led-editor-backdrop[hidden]{display:none!important}
+}
+
+</style></head><body><header><div class="head"><span id="state" class="muted">Verbinde …</span><div class="brand">SBOC.</div><button class="secondary" id="logout">Abmelden</button></div><nav><button class="active" data-page="status">Status</button><button data-page="config">Konfiguration</button><button data-page="settings">Benutzereinstellungen</button></nav></header><div class="flow-bridge" id="flowBridge" aria-hidden="true"><div class="flow-bridge-stem" id="flowBridgeStem"></div></div>
 <aside class="steps" id="jumpMenu"><a href="#devicesSection">Geräte</a><a href="#modeSection">Modus</a><a href="#ledSection">LEDs</a><a href="#mailSection">E-Mail</a><a href="#systemSection">System</a><button id="saveAll" class="save-all">Alles speichern</button><span id="dirtyIndicator" class="muted" hidden>Ungespeicherte Änderungen</span></aside>
-<main><div class="page active" id="page-status"><section><h2>Geräteübersicht</h2><div id="statusDevices"></div></section><section><div class="row" style="justify-content:space-between"><h2>Ereignisse</h2><button class="secondary" id="loadEvents">Aktualisieren</button></div><div id="events" class="muted">Noch keine Ereignisse geladen.</div></section></div>
+<main><div class="page active" id="page-status"><section><h2>Geräteübersicht</h2><div id="statusDevices"></div></section><section><div class="row" style="justify-content:space-between"><h2>Ereignisse</h2><button class="secondary" id="loadEvents">Aktualisieren</button></div><div id="activeAlarms"></div><div id="events" class="muted">Noch keine Ereignisse geladen.</div></section></div>
 <div class="page" id="page-settings"><section><h2>User Settings</h2><p class="muted">Manage your account and preferred interface language.</p><h3>Language</h3><label class="field">Interface language<select id="userLanguage"><option value="en">English</option><option value="de">Deutsch</option></select></label><button id="saveLanguage">Save language</button><h3>Change password</h3><form id="passwordForm" autocomplete="off"><div class="formgrid"><label class="field">Current password<input id="currentPassword" type="password" autocomplete="current-password" required></label><label class="field">New password<input id="newPassword" type="password" autocomplete="new-password" minlength="12" maxlength="256" required></label><label class="field">Confirm new password<input id="confirmPassword" type="password" autocomplete="new-password" minlength="12" maxlength="256" required></label></div><button type="submit">Change password</button></form><p class="muted">After changing your password, sign in again.</p></section></div>
 <div class="page" id="page-config"><p id="wizardIntro" class="muted" hidden></p>
 <section id="devicesSection"><h2>1 · Geräte einrichten</h2><p class="muted">Agent suchen oder manuell hinzufügen, Gerätefarbe und Überwachung zentral festlegen.</p><div class="row"><button id="discover" class="secondary">Geräte suchen</button><button id="manualToggle" class="secondary">Gerät manuell hinzufügen</button></div><div id="manualFields" hidden><div class="row"><select id="devtype" aria-label="Gerätetyp"><option value="agent">Linux-Agent</option><option value="haos">Home Assistant OS</option></select><input id="devname" placeholder="Geräte-ID" aria-label="Geräte-ID"><input id="devhost" placeholder="IP oder Hostname" aria-label="IP oder Hostname"><button id="add">Hinzufügen</button></div></div><div id="haFields" hidden class="ha-editor"><label class="field">Home-Assistant-Zugriffstoken<input id="haToken" type="password" autocomplete="off" placeholder="Langlebiger Zugriffstoken"></label><p class="config-note">Den Token unter Home Assistant → Benutzerprofil → Sicherheit erstellen. <a href="https://www.home-assistant.io/docs/authentication/" target="_blank" rel="noopener noreferrer">Anleitung von Home Assistant</a>. Die Verbindung wird vor dem Hinzufügen geprüft.</p></div><div id="haEditor" class="ha-editor" hidden><h3 id="haEditorTitle">Home Assistant bearbeiten</h3><div class="formgrid"><label class="field">Home-Assistant-Adresse<input id="haEditUrl" placeholder="http://homeassistant.local:8123"></label><label class="field">Neuer Zugriffstoken (optional)<input id="haEditToken" type="password" autocomplete="off" placeholder="Bisherigen Token beibehalten"></label></div><p class="config-note">Neuen Token erstellen: <a href="https://www.home-assistant.io/docs/authentication/" target="_blank" rel="noopener noreferrer">Home Assistant – Benutzerprofil und Sicherheit</a>.</p><button id="haRefresh" class="secondary">Verbindung und Sensoren prüfen</button><p class="config-note">Gefundene System-Monitor-Sensoren werden automatisch zugeordnet. Bei Bedarf kannst du eine andere Entität auswählen.</p><div id="haSensorFields" class="formgrid"></div><div class="row"><button id="haCancel" class="secondary">Schließen</button><button id="haApply">Sensorzuordnung übernehmen</button></div></div><div id="found"></div><div id="devices"></div><h3>Systemdienste und Container</h3><div class="form-action-row"><label class="field">Gerät<select id="watchDevice"></select></label><button class="secondary" id="loadCatalog">Liste anzeigen</button></div><p class="muted">Die verfügbaren Dienste und Container werden nur beim Start des Agents ermittelt. Neue Einträge erscheinen nach <code>sudo systemctl restart sboc-agent</code> auf dem jeweiligen Gerät. Ein kompletter Geräteneustart ist nicht nötig. Ausgewählte Zustände werden regelmäßig geprüft.</p><div id="catalog"></div><div class="wizard-footer" hidden><button class="wizard-next">Einstellungen übernehmen</button></div></section>
@@ -598,8 +644,50 @@ scheduleFlowBridgeAlignment();requestAnimationFrame(updateJumpFocus);
 for(const b of document.querySelectorAll('[data-page]'))b.onclick=()=>{const config=b.dataset.page==='config';requestAnimationFrame(updateJumpFocus);document.body.classList.toggle('config-mode',config);document.querySelectorAll('[data-page]').forEach(x=>x.classList.toggle('active',x===b));document.querySelectorAll('.page').forEach(x=>x.classList.toggle('active',x.id==='page-'+b.dataset.page));scheduleFlowBridgeAlignment();window.scrollTo(0,0)};
 function mapped(row){return cfg.mapping[row]||{device:'__off__',left_device:'__off__',right_device:'__off__',metric:'static',color:'#56c5ee',status_color:'#56c5ee'}}
 function color(row,side){const x=cfg.mapping[row];if(!x)return '#30363b';const dev=side===0?x.left_device:x.right_device;if(dev==='__off__')return '#30363b';if(side===0)return dev==='__static__'?x.color:cfg.device_colors[dev]||'#56c5ee';if(x.right_off)return '#30363b';if(x.metric==='static')return x.status_color;if(dev==='__static__')return '#333333';const val=status?.metrics?.[dev]?.metrics?.[x.metric];if(typeof val!=='number')return '#777';const t=cfg.thresholds[x.metric]||[20,50,80];return cfg.status_colors[t.filter(v=>val>=v).length]}
-function drawCase(){const g=$('caseLeds');g.replaceChildren();for(let row=0;row<10;row++){const y=48+row*43;const rail=document.createElementNS('http://www.w3.org/2000/svg','rect');for(const [k,v] of Object.entries({x:78,y,width:204,height:23,rx:3,fill:'#ffffff',stroke:'#999999'}))rail.setAttribute(k,v);g.append(rail);for(let side=0;side<2;side++){const a=document.createElementNS('http://www.w3.org/2000/svg','g');a.setAttribute('class','led-cell'+(selected.row===row&&selected.side===side?' selected':''));a.setAttribute('tabindex','0');a.setAttribute('role','button');a.setAttribute('aria-label',`LED ${row+1} ${side?'rechts':'links'}`);const rect=document.createElementNS('http://www.w3.org/2000/svg','rect');for(const [k,v] of Object.entries({x:side?189:82,y:y+3,width:89,height:17,rx:2,fill:color(row,side),stroke:'#555','stroke-width':1,class:'led-outline'}))rect.setAttribute(k,v);a.append(rect);a.onclick=()=>selectLed(row,side);a.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();selectLed(row,side)}};g.append(a)}const number=document.createElementNS('http://www.w3.org/2000/svg','text');for(const [k,v] of Object.entries({x:180,y:y+15,'text-anchor':'middle','font-size':11,'font-weight':600,fill:'#333','pointer-events':'none'}))number.setAttribute(k,v);number.textContent=String(row+1);g.append(number)}}
-function selectLed(row,side){selected={row,side};const x=mapped(row);$('selectedTitle').textContent=`LED ${row+1} · ${side?'rechts':'links'}`;options($('ledDevice'),[['__off__','Aus'],['__static__','Feste Farbe (Dummy)'],...cfg.devices.map(d=>[d.id,d.id])],x.left_device);options($('ledMetric'),[['off','Aus'],...metrics.map(m=>[m,names[m]]),['static','Feste Farbe (Dummy)']],x.right_off?'off':x.metric);$('ledColor').value=x.color;$('ledStatusColor').value=x.status_color;const ov=cfg.overrides[String(row)]||{kind:'none',effect:'pulse',color:'#ff3030'};const device=x.left_device;const w=cfg.watches[device]||{services:[],containers:[]};options($('ledOverride'),[['none','Keine'],['throttling','CPU-Throttling'],['undervoltage','Unterspannung'],['filesystem_ro','Dateisystem schreibgeschützt'],['oom','OOM-Killer'],['offline','Offline'],...w.services.map(v=>['service:'+v,'Dienst: '+v]),...w.containers.map(v=>['container:'+v,'Container: '+v])],ov.kind);$('ledEffect').value=ov.effect;$('ledWarnColor').value=ov.color;$('rightFields').hidden=side===0;$('ledDeviceField').hidden=side===1;$('ledColorField').hidden=side===1;$('rightDeviceInfo').textContent=device==='__off__'?'Aus':device==='__static__'?'Feste Farbe (Dummy)':('Gerät: '+device);updateColorVisibility();drawCase()}
+function drawCase(){const g=$('caseLeds');g.replaceChildren();for(let row=0;row<10;row++){const y=48+row*43;const rail=document.createElementNS('http://www.w3.org/2000/svg','rect');for(const [k,v] of Object.entries({x:78,y,width:204,height:23,rx:3,fill:'#ffffff',stroke:'#999999'}))rail.setAttribute(k,v);g.append(rail);for(let side=0;side<2;side++){const a=document.createElementNS('http://www.w3.org/2000/svg','g');a.setAttribute('class','led-cell'+(selected.row===row&&selected.side===side?' selected':''));a.setAttribute('tabindex','0');a.setAttribute('role','button');a.setAttribute('aria-label',`LED ${row+1} ${side?'rechts':'links'}`);const rect=document.createElementNS('http://www.w3.org/2000/svg','rect');for(const [k,v] of Object.entries({x:side?189:82,y:y+3,width:89,height:17,rx:2,fill:color(row,side),stroke:'#555','stroke-width':1,class:'led-outline'}))rect.setAttribute(k,v);a.append(rect);a.onclick=()=>selectLed(row,side,true);a.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();selectLed(row,side,true)}};g.append(a)}const number=document.createElementNS('http://www.w3.org/2000/svg','text');for(const [k,v] of Object.entries({x:180,y:y+15,'text-anchor':'middle','font-size':11,'font-weight':600,fill:'#333','pointer-events':'none'}))number.setAttribute(k,v);number.textContent=String(row+1);g.append(number)}}
+function placeMobileLedEditor(open){
+ const panel=document.querySelector('#ledSection .panel');
+ const shell=document.querySelector('#ledSection .shell');
+ const rack=document.querySelector('#ledSection .case');
+ if(!panel||!shell||!rack)return;
+ let backdrop=document.querySelector('#ledSection .led-editor-backdrop');
+ if(!backdrop){backdrop=document.createElement('div');backdrop.className='led-editor-backdrop';backdrop.hidden=true;document.body.append(backdrop)}
+ const closeEditor=()=>{panel.hidden=true;panel.dataset.open='0';backdrop.hidden=true};
+ backdrop.onclick=closeEditor;
+ if(!panel.querySelector('.led-editor-close')){
+  const close=document.createElement('button');close.type='button';close.className='led-editor-close secondary';close.textContent='Schließen';close.onclick=closeEditor;panel.prepend(close);
+ }
+ if(window.matchMedia('(max-width:850px)').matches){
+  if(panel.parentElement!==rack)rack.append(panel);
+  panel.classList.add('mobile-led-editor');
+  if(open)panel.dataset.open='1';
+  panel.hidden=panel.dataset.open!=='1';backdrop.hidden=panel.hidden;
+  if(!panel.hidden){
+   panel.style.top='12px';
+   const led=rack.querySelectorAll('.led-cell')[selected.row*2+selected.side];
+   const rect=led?.getBoundingClientRect();
+   const viewport=window.visualViewport;
+   const top=viewport?.offsetTop||0;
+   const bottom=top+(viewport?.height||window.innerHeight);
+   const available=Math.max(160,bottom-top-24);
+   panel.style.maxHeight=available+'px';
+   const panelHeight=Math.min(panel.scrollHeight+4,available);
+   const below=(rect?.bottom||top)+8;
+   const above=(rect?.top||bottom)-panelHeight-8;
+   let y=(bottom-below>=panelHeight)?below:(above>=top+12?above:Math.max(top+12,Math.min(below,bottom-panelHeight-12)));
+   panel.style.top=Math.round(y)+'px';
+  }
+ }else{
+  backdrop.hidden=true;
+  if(panel.parentElement!==shell)shell.append(panel);
+  panel.classList.remove('mobile-led-editor');panel.hidden=false;panel.style.top='';panel.style.maxHeight='';panel.dataset.open='0';
+ }
+}
+window.addEventListener('resize',()=>placeMobileLedEditor(false));
+if(window.visualViewport)window.visualViewport.addEventListener('resize',()=>placeMobileLedEditor(false));
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&window.matchMedia('(max-width:850px)').matches){const panel=document.querySelector('#ledSection .panel');if(panel&&!panel.hidden){panel.hidden=true;panel.dataset.open='0';const bg=document.querySelector('.led-editor-backdrop');if(bg)bg.hidden=true}}});
+
+function selectLed(row,side,openEditor=false){selected={row,side};const x=mapped(row);$('selectedTitle').textContent=`LED ${row+1} · ${side?'rechts':'links'}`;options($('ledDevice'),[['__off__','Aus'],['__static__','Feste Farbe (Dummy)'],...cfg.devices.map(d=>[d.id,d.id])],x.left_device);options($('ledMetric'),[['off','Aus'],...metrics.map(m=>[m,names[m]]),['static','Feste Farbe (Dummy)']],x.right_off?'off':x.metric);$('ledColor').value=x.color;$('ledStatusColor').value=x.status_color;const ov=cfg.overrides[String(row)]||{kind:'none',effect:'pulse',color:'#ff3030'};const device=x.left_device;const w=cfg.watches[device]||{services:[],containers:[]};options($('ledOverride'),[['none','Keine'],['throttling','CPU-Throttling'],['undervoltage','Unterspannung'],['filesystem_ro','Dateisystem schreibgeschützt'],['oom','OOM-Killer'],['offline','Offline'],...w.services.map(v=>['service:'+v,'Dienst: '+v]),...w.containers.map(v=>['container:'+v,'Container: '+v])],ov.kind);$('ledEffect').value=ov.effect;$('ledWarnColor').value=ov.color;$('rightFields').hidden=side===0;$('ledDeviceField').hidden=side===1;$('ledColorField').hidden=side===1;$('rightDeviceInfo').textContent=device==='__off__'?'Aus':device==='__static__'?'Feste Farbe (Dummy)':('Gerät: '+device);updateColorVisibility();drawCase();placeMobileLedEditor(openEditor)}
 function updateColorVisibility(){$('ledColorField').hidden=selected.side!==0||$('ledDevice').value!=='__static__';$('statusColorField').hidden=$('ledMetric').value!=='static';const active=$('ledOverride').value!=='none';$('ledEffect').closest('label').hidden=!active;$('ledWarnColor').closest('label').hidden=!active}$('ledDevice').onchange=updateColorVisibility;$('ledMetric').onchange=updateColorVisibility;$('ledOverride').onchange=updateColorVisibility;
 function applySelected(){const i=selected.row,x=mapped(i);if(selected.side===0){if($('ledDevice').value==='__off__'){cfg.mapping[i]=null;delete cfg.overrides[String(i)];markDirty();drawCase();return}x.left_device=$('ledDevice').value;x.color=$('ledColor').value;if(x.right_device!==x.left_device){x.right_device=x.left_device;x.device=x.left_device;x.metric='static';x.right_off=true;delete cfg.overrides[String(i)]}x.device=x.left_device}else{if(x.left_device==='__off__'){notice('Bitte zuerst links ein Gerät oder Dummy auswählen',true);return}x.right_device=x.left_device;x.device=x.left_device;x.metric=$('ledMetric').value==='off'?'static':$('ledMetric').value;x.right_off=$('ledMetric').value==='off';x.status_color=$('ledStatusColor').value;cfg.overrides[String(i)]={kind:$('ledOverride').value,effect:$('ledEffect').value,color:$('ledWarnColor').value}}cfg.mapping[i]=x;markDirty();drawCase()}
 for(const id of ['ledDevice','ledColor','ledMetric','ledStatusColor','ledOverride','ledEffect','ledWarnColor'])$(id).addEventListener('change',()=>{applySelected();selectLed(selected.row,selected.side)});
@@ -630,6 +718,24 @@ $('haApply').onclick=async()=>{const d=cfg.devices.find(x=>x.id===haEditorDevice
 $('add').onclick=async()=>{const ha=$('devtype').value==='haos',raw=$('devhost').value.trim();let id=$('devname').value.trim(),entry;try{if(ha){const u=parseHAUrl(raw),token=$('haToken').value.trim();if(!token)throw Error('HA-Zugriffstoken eingeben');$('add').disabled=true;const probe=await api('/api/ha/inspect','POST',{url:raw,token});if(!id)id=(probe.name||'homeassistant').toLowerCase().replace(/[^a-z0-9_-]+/g,'_').slice(0,48)||'homeassistant';entry={id,...u,type:'haos',token,entities:{}}}else{if(!id||!raw)throw Error('Geräte-ID und Host eingeben');const code=prompt('Kopplungscode vom Agent eingeben (sudo sboc-pairing-code):');if(!code)throw Error('Kopplung abgebrochen');const result=await api('/api/agent/pair','POST',{host:raw,port:8765,code:code.trim()});entry={id,host:raw,port:8765,type:'agent',agent_identity:result.agent_identity}}if(!/^[a-zA-Z0-9_-]{1,48}$/.test(id))throw Error('Gerätename: nur Buchstaben, Zahlen, _ und - (max. 48)');if(cfg.devices.some(d=>d.id===id))throw Error('Geräte-ID bereits vorhanden');cfg.devices.push(entry);$('devname').value='';$('haToken').value='';save();notice('Gerät hinzugefügt. Bitte Alles speichern wählen.')}catch(e){notice(e.message,true)}finally{$('add').disabled=false}};
 $('discover').onclick=async()=>{try{const found=(await api('/api/discover')).devices,container=$('found');container.replaceChildren();const seen=new Set();for(const d of found){const key=d.name+':'+d.port;if(seen.has(key))continue;seen.add(key);const line=E('div','','device-row');line.append(E('span',d.name+' · '+d.host+':'+d.port));const b=E('button','Übernehmen');b.onclick=async()=>{const id=d.name.toLowerCase().replace(/[^a-z0-9_-]/g,'_').slice(0,48);if(cfg.devices.some(x=>x.id===id))return notice('Gerät bereits vorhanden',true);try{const code=prompt('Kopplungscode für '+d.name+' eingeben (auf Agent: sudo sboc-pairing-code):');if(!code)return;const result=await api('/api/agent/pair','POST',{host:d.host,port:d.port,code:code.trim()});cfg.devices.push({id,host:d.host,port:d.port,type:'agent',agent_identity:result.agent_identity});save()}catch(e){notice('Kopplung fehlgeschlagen: '+e.message,true)}};line.append(b);container.append(line)}if(!found.length){container.append(E('p','Keine neuen Agents gefunden. Du kannst ein Gerät manuell hinzufügen.'))}}catch(e){notice(e.message,true)}};
 $('loadCatalog').onclick=async()=>{try{const id=$('watchDevice').value;if(!id)return;const j=await api('/api/catalog?device='+encodeURIComponent(id)),w=cfg.watches[id]||{services:[],containers:[]},c=$('catalog');c.replaceChildren();for(const [kind,items] of [['services',j.catalog.services||[]],['containers',Object.entries(j.catalog.containers||{}).flatMap(([r,names])=>names.map(n=>r+':'+n))]]){c.append(E('h3',kind==='services'?'Systemdienste':'Container'));for(const name of items){const l=E('label',name,'device-row'),check=document.createElement('input');check.type='checkbox';check.dataset.kind=kind;check.dataset.name=name;check.checked=w[kind].includes(name);l.append(check);c.append(l)}}}catch(e){notice(e.message,true)}};function collectWatches(){const id=$('watchDevice').value;if(!id)return;cfg.watches[id]={services:[],containers:[]};for(const input of $('catalog').querySelectorAll('input:checked'))cfg.watches[id][input.dataset.kind].push(input.dataset.name);markDirty()};
+function renderAlarms(){
+ const host=$('activeAlarms');if(!host)return;
+ host.replaceChildren();const alarms=status?.active_alarms||[];
+ if(!alarms.length){host.append(E('p','Keine aktiven Alarme','muted'));return}
+ for(const a of alarms){
+  const row=E('div','','device-row'),info=E('div','','device-info');
+  info.append(E('strong',a.device+' · '+a.kind));
+  const led=a.rows.length?'LED-Zeilen '+a.rows.join(', '):'Keine LED-Zuordnung';
+  info.append(E('small',led+' · seit '+new Date(a.since*1000).toLocaleString()+(a.acknowledged?' · quittiert':a.silent_trigger?' · Silent Mode ausgelöst':' · aktiv')));
+  row.append(info);
+  if(!a.acknowledged){
+   const button=E('button','Quittieren','secondary');
+   button.onclick=async()=>{try{await api('/api/alerts/ack','POST',{device:a.device,kind:a.kind,since:a.since});status=await api('/api/status');renderAlarms();drawCase()}catch(e){notice(e.message,true)}};
+   row.append(button);
+  }
+  host.append(row);
+ }
+}
 $('loadEvents').onclick=async()=>{try{const ev=(await api('/api/events')).events;$('events').replaceChildren(...ev.map(x=>E('div',new Date(x.ts*1000).toLocaleString()+' · '+x.device+' · '+x.kind+' · '+x.phase,'device-row')))}catch(e){notice(e.message,true)}};
 function mailForm(){return {enabled:$('mailEnabled').checked,host:$('mailHost').value,port:Number($('mailPort').value),mode:$('mailMode').value,username:$('mailUser').value,password:$('mailPassword').value,sender:$('mailSender').value,recipient:$('mailRecipient').value,delay:Number($('mailDelay').value),recovery:$('mailRecovery').checked}}document.querySelectorAll('#mailSection input,#mailSection select').forEach(x=>x.addEventListener('change',markDirty));$('mailTest').onclick=async()=>{try{await api('/api/mail/test','POST',{});notice('Testmail versendet')}catch(e){notice(e.message,true)}};
 
@@ -657,7 +763,7 @@ document.querySelectorAll('.wizard-next').forEach(b=>b.onclick=async()=>{
 window.addEventListener('beforeunload',e=>{if(dirty&&!wizard){e.preventDefault();e.returnValue=''}});
 $('saveLanguage').onclick=async()=>{try{const result=await api('/api/user/language','POST',{language:$('userLanguage').value});applyLanguage(result.language);if(cfg)draw();notice(t('Language saved'))}catch(e){notice(e.message,true)}};
 $('passwordForm').onsubmit=async e=>{e.preventDefault();try{await api('/api/user/password','POST',{current:$('currentPassword').value,password:$('newPassword').value,confirmation:$('confirmPassword').value});$('passwordForm').reset();alert(t('Password changed. Please sign in again.'));location.reload()}catch(err){notice(err.message,true)}};
-async function init(){try{const prefs=await api('/api/user');$('userLanguage').value=prefs.language;applyLanguage(prefs.language);status=await api('/api/status');cfg=status.config;wizard=!cfg.setup_complete;wizardStep=cfg.setup_step||0;draw();updateWizard();const m=(await api('/api/mail')).settings;for(const [id,v] of [['mailEnabled',m.enabled],['mailHost',m.host],['mailPort',m.port],['mailMode',m.mode],['mailUser',m.username],['mailSender',m.sender],['mailRecipient',m.recipient],['mailDelay',m.delay],['mailRecovery',m.recovery]])if(v!==undefined){if(id==='mailEnabled'||id==='mailRecovery')$(id).checked=v;else $(id).value=v};$('loadEvents').click()}catch(e){notice(e.message,true)}}$('logout').onclick=async()=>{await api('/api/logout','POST',{});location.reload()};init();setInterval(async()=>{try{status=await api('/api/status');$('state').textContent=t(status.led_available?'LEDs bereit':'LED-Ausgabe nicht bereit')+' · '+new Date().toLocaleTimeString();drawCase()}catch(e){}},5000);
+async function init(){try{const prefs=await api('/api/user');$('userLanguage').value=prefs.language;applyLanguage(prefs.language);status=await api('/api/status');cfg=status.config;wizard=!cfg.setup_complete;wizardStep=cfg.setup_step||0;draw();updateWizard();const m=(await api('/api/mail')).settings;for(const [id,v] of [['mailEnabled',m.enabled],['mailHost',m.host],['mailPort',m.port],['mailMode',m.mode],['mailUser',m.username],['mailSender',m.sender],['mailRecipient',m.recipient],['mailDelay',m.delay],['mailRecovery',m.recovery]])if(v!==undefined){if(id==='mailEnabled'||id==='mailRecovery')$(id).checked=v;else $(id).value=v};$('loadEvents').click();renderAlarms()}catch(e){notice(e.message,true)}}$('logout').onclick=async()=>{await api('/api/logout','POST',{});location.reload()};init();setInterval(async()=>{try{status=await api('/api/status');$('state').textContent=t(status.led_available?'LEDs bereit':'LED-Ausgabe nicht bereit')+' · '+new Date().toLocaleTimeString();renderAlarms();drawCase()}catch(e){}},5000);
 </script></body></html>'''
 AUTH_HTML='''<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>SBOC.</title><link rel="icon" type="image/png" href="/assets/m3ro-favicon.png"><style>
 @font-face{font-family:'Sora';src:url('/assets/fonts/Sora-Regular.ttf') format('truetype');font-weight:400;font-display:swap}
@@ -679,7 +785,17 @@ body{font-family:Sora,system-ui,sans-serif;background:#f7f7f3;color:#0c0c0b;marg
 .m3ro{display:block;width:64px;height:auto;object-fit:contain}
 .sboc-version{font-size:12px;color:#888}
 @media(max-height:640px){.m3ro-signature{position:static;transform:none;margin:130px auto 35px}}
-@media(max-width:480px){.auth-wrap main{margin-top:9vh;padding:20px}.auth-wrap main h1{font-size:clamp(38px,12vw,54px)}}
+@media(max-width:480px){
+ .auth-wrap{min-height:100vh;min-height:100dvh;display:flex;flex-direction:column}
+ .auth-wrap main{width:100%;margin:0 auto;padding:clamp(28px,7vh,64px) 20px 18px;flex:0 0 auto}
+ .auth-wrap main h1{font-size:clamp(38px,12vw,54px)}
+ .m3ro-signature{position:static;top:auto;left:auto;transform:none;margin:auto auto 0;padding:20px 0 max(18px,env(safe-area-inset-bottom));flex:0 0 auto}
+}
+@media(max-width:480px) and (max-height:650px){
+ .auth-wrap main{padding-top:18px}
+ .auth-wrap main h1{margin-bottom:16px}
+ .m3ro-signature{padding-top:12px}
+}
 </style></head><body><div class="auth-wrap"><main><h1>SBOC.</h1><p id="setup-note" hidden>Administratorkonto anlegen. Passwort mindestens 12 Zeichen. Einrichtungscode auf dem Controller mit <code>sudo sboc-setup-code</code> anzeigen.</p><label id="setup-code-field" hidden>Setup code<input id="setup-code" autocomplete="off"></label><form id="form"><label>Username<input id="username" required minlength="3" maxlength="48" autocomplete="username"></label><label>Password<input id="password" type="password" required minlength="12" autocomplete="current-password"></label><button id="submit">Sign in</button></form><p id="error" role="alert"></p></main><div class="m3ro-signature"><img class="m3ro" src="/assets/m3ro-gray.png" alt="M3ro"><span class="sboc-version" style="font-size:12px;color:#888">Version @@VERSION@@</span></div></div><script>const setup='@@MODE@@'==='setup';document.getElementById('submit').textContent=setup?'Create account':'Sign in';document.getElementById('setup-note').hidden=!setup;document.getElementById('setup-code-field').hidden=!setup;if(!setup)document.getElementById('password').minLength=1;document.getElementById('form').onsubmit=async e=>{e.preventDefault();const submit=document.getElementById('submit');submit.disabled=true;try{const r=await fetch(setup?'/api/setup':'/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:document.getElementById('username').value,password:document.getElementById('password').value,setup_code:document.getElementById('setup-code').value})});const j=await r.json();if(!r.ok)throw Error(j.error||'Error');location.reload()}catch(e){document.getElementById('error').textContent=e.message}finally{submit.disabled=false}};</script></html>'''
 
 def main():
@@ -798,6 +914,11 @@ def main():
                         lan_host(address.hostname,address.port or (443 if address.scheme=='https' else 80))
                         self.send(inspect_ha(address.scheme, address.hostname, address.port or (443 if address.scheme=='https' else 80), token))
                     except Exception as e:self.send({'error':'Home Assistant: '+str(e)},400)
+                elif path=='/api/alerts/ack':
+                    device=obj.get('device');kind=obj.get('kind');since=obj.get('since')
+                    if not isinstance(device,str) or not isinstance(kind,str) or type(since)!=int:raise ValueError('Ungültige Alarmkennung')
+                    if controller.store.acknowledge(device,kind,since):self.send({'ok':True})
+                    else:self.send({'error':'Alarm nicht mehr aktiv oder bereits quittiert'},409)
                 elif path=='/api/config':controller.update(obj);self.send({'config':controller.public_config()})
                 elif path=='/api/agent/pair':self.send({'agent_identity':controller.pair(obj)})
                 elif path=='/api/test':

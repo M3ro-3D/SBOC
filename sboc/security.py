@@ -15,6 +15,10 @@ class Store:
             CREATE TABLE IF NOT EXISTS alerts (device TEXT NOT NULL, kind TEXT NOT NULL, active INTEGER NOT NULL, since INTEGER NOT NULL, notified INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(device,kind));
             CREATE TABLE IF NOT EXISTS mail_settings (id INTEGER PRIMARY KEY CHECK(id=1), data TEXT NOT NULL);
             ''')
+        with self.lock,self.db() as db:
+            cols={row[1] for row in db.execute('PRAGMA table_info(alerts)')}
+            if 'acknowledged' not in cols:
+                db.execute('ALTER TABLE alerts ADD COLUMN acknowledged INTEGER NOT NULL DEFAULT 0')
         self._ensure_bootstrap()
     def _ensure_bootstrap(self):
         # Existing installations remain configured and need no bootstrap code.
@@ -94,12 +98,18 @@ class Store:
             if old and bool(old[0])==bool(active): return False
             if not old and not active: return False
             pending=(-1 if old and old[2]==1 else 1) if not active else 0
-            db.execute('INSERT INTO alerts VALUES(?,?,?,?,?) ON CONFLICT(device,kind) DO UPDATE SET active=excluded.active,since=excluded.since,notified=excluded.notified',(device,kind,int(active),now,pending))
+            db.execute('INSERT INTO alerts(device,kind,active,since,notified,acknowledged) VALUES(?,?,?,?,?,0) ON CONFLICT(device,kind) DO UPDATE SET active=excluded.active,since=excluded.since,notified=excluded.notified,acknowledged=0',(device,kind,int(active),now,pending))
             db.execute('INSERT INTO events(ts,device,kind,phase,details) VALUES(?,?,?,?,?)',(now,device,kind,'begin' if active else 'end',details))
             return True
     def alerts(self):
         with self.lock,self.db() as db:
-            return [dict(zip(('device','kind','active','since','notified'),row)) for row in db.execute('SELECT device,kind,active,since,notified FROM alerts')]
+            return [dict(zip(('device','kind','active','since','notified','acknowledged'),row)) for row in db.execute('SELECT device,kind,active,since,notified,acknowledged FROM alerts')]
+    def acknowledge(self,device,kind,since):
+        with self.lock,self.db() as db:
+            cur=db.execute('UPDATE alerts SET acknowledged=1 WHERE device=? AND kind=? AND since=? AND active=1 AND acknowledged=0',(device,kind,since))
+            if cur.rowcount:
+                db.execute('INSERT INTO events(ts,device,kind,phase,details) VALUES(?,?,?,?,?)',(int(time.time()),device,kind,'acknowledged','User acknowledged alarm'))
+            return cur.rowcount == 1
     def notified(self,device,kind):
         with self.lock,self.db() as db: db.execute('UPDATE alerts SET notified=1 WHERE device=? AND kind=?',(device,kind))
     def events(self,limit=200):
