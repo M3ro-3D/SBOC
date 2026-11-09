@@ -16,8 +16,8 @@ from .network_policy import lan_host
 
 DEFAULT={'enabled':True,'brightness':50,'night':{'enabled':False,'start':'22:00','end':'07:00','brightness':0},
          'interval':60,'failures':3,'devices':[], 'mapping':[None for _ in range(10)],
-         'thresholds':{'temperature':[40,50,60],'cpu':[20,50,80],'ram':[20,50,80],'disk':[60,80,95],'network':[100,1000,10000],'network':[100,1000,10000]},
-         'operation_mode':'both', 'operation_mode':'both', 'led_reverse':[False,False], 'led_swap':False, 'device_colors':{}, 'test_effect':'orientation',
+         'thresholds':{'temperature':[40,50,60],'cpu':[20,50,80],'ram':[20,50,80],'disk':[60,80,95],'network':[100,1000,10000]},
+         'operation_mode':'both', 'led_reverse':[False,False], 'led_swap':False, 'device_colors':{}, 'test_effect':'orientation',
          'status_colors':['#0000FF','#00FF00','#FFA000','#FF0000'], 'silent':{'enabled':False,'delay':60}, 'overrides':{}, 'watches':{}, 'setup_complete':False, 'setup_step':0}
 COLORS=[(0,0,255,0),(0,255,0,0),(255,160,0,0),(255,0,0,0)]
 METRICS=('temperature','cpu','ram','disk','network')
@@ -45,9 +45,6 @@ def validate(obj):
     nb=night.get('brightness',0)
     if type(nb)!=int or not 0<=nb<=80: raise ValueError('night brightness 0..80')
     cfg['night']['brightness']=nb
-    mode=obj.get('operation_mode','both')
-    if mode not in ('led','mail','both','web'): raise ValueError('invalid operation mode')
-    cfg['operation_mode']=mode
     mode=obj.get('operation_mode','both')
     if mode not in ('led','mail','both','web'): raise ValueError('invalid operation mode')
     cfg['operation_mode']=mode
@@ -190,8 +187,10 @@ class Controller:
         self.trust_path=self.path.parent/'agent-trust.json'; self.agent_keys=read_json(self.trust_path,{}); self.store=Store(self.path.parent/'events.sqlite3'); self.catalogs={}; self.oom_seen={}; self.active_since={}; self.last_mail_check=0
         self.leds=LEDs(enabled=False) if simulate else LEDClient(); self.data={}; self.failed={}; self.last_poll=0
         self.test_started=None; self.test_effect=None; self.test_orientation=None; self.running=True
-        threading.Thread(target=self.poll_loop,daemon=True).start()
-        threading.Thread(target=self.render_loop,daemon=True).start()
+        self.poll_thread=threading.Thread(target=self.poll_loop,daemon=True)
+        self.render_thread=threading.Thread(target=self.render_loop,daemon=True)
+        self.poll_thread.start()
+        self.render_thread.start()
     def pair(self,obj):
         host=obj.get('host','');port=obj.get('port',8765)
         if not isinstance(host,str) or not re.fullmatch(r'[a-zA-Z0-9.:-]{1,253}',host) or type(port)!=int or not 1<=port<=65535:raise ValueError('Ungültiger Agent-Host')
@@ -263,6 +262,9 @@ class Controller:
         for name,state in payload.get('containers',{}).items():
             if state is not None: self.store.transition(device,'container:'+name,state is False)
     def check_mail(self):
+        with self.lock:
+            if self.cfg['operation_mode'] not in ('mail', 'both'):
+                return
         settings=self.store.mail()
         if not settings.get('enabled'): return
         for alert in self.store.alerts():
@@ -346,7 +348,7 @@ class Controller:
         while self.running:
             with self.lock:
                 cfg=copy.deepcopy(self.cfg); data=copy.deepcopy(self.data); failed=dict(self.failed); started=self.test_started; test_effect=self.test_effect; test_orientation=self.test_orientation
-            b=effective_brightness(cfg) if cfg['operation_mode'] in ('led','both') else 0 if cfg['operation_mode'] in ('led','both') else 0
+            b=effective_brightness(cfg) if cfg['operation_mode'] in ('led','both') else 0
             if started is not None:
                 pixels=self.test_pixels(time.monotonic()-started,test_effect or cfg['test_effect'])
                 wiring=test_orientation or {'swap':cfg['led_swap'],'reverse':cfg['led_reverse']}

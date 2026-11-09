@@ -1,46 +1,16 @@
-# Python
+# Runtime state and secrets
 __pycache__/
 *.py[cod]
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
 .venv/
 venv/
-# Secrets and runtime data
-.env
-.env.*
-!.env.example
-config.json
-*.sqlite3
-*.sqlite3-*
 *.db
-*.pem
-*.key
-*.p12
-*.pfx
+*.sqlite*
 *.log
-*.bak
-*.backup
-# Editor / OS
-.idea/
-.vscode/
-.DS_Store
-Thumbs.db
-# Releases
-*.tar.gz
-*.zip
-# SQLite journals and alternate local state
-*.sqlite
-*.sqlite-*
-*.sqlite3-shm
-*.sqlite3-wal
-*.db-*
-*.json.local
-*.secrets.json
-# Locally generated secrets / credentials
 *.token
 *.secret
-*.credentials
-
-# Schriftarten werden vom Installer heruntergeladen
+*.secrets.json
+# Fonts are acquired by install.sh
 /sboc/assets/fonts/
+.pytest_cache/
+.coverage
+*.egg-info/

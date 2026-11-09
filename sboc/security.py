@@ -1,6 +1,7 @@
 """Local controller accounts, sessions and SQLite events."""
 import hashlib, hmac, json, secrets, sqlite3, threading, time, os
 from pathlib import Path
+from contextlib import contextmanager
 
 class Store:
     def __init__(self, path):
@@ -32,10 +33,15 @@ class Store:
                 stream.write(code+'\n')
     def setup_code(self):
         return self.bootstrap_path.read_text().strip() if self.bootstrap_path.exists() else None
+    @contextmanager
     def db(self):
         con=sqlite3.connect(str(self.path),timeout=10)
-        con.execute('PRAGMA journal_mode=WAL')
-        return con
+        try:
+            con.execute('PRAGMA journal_mode=WAL')
+            with con:
+                yield con
+        finally:
+            con.close()
     def configured(self):
         with self.lock,self.db() as db: return db.execute('SELECT EXISTS(SELECT 1 FROM accounts)').fetchone()[0]==1
     def setup(self,username,password,code=None):

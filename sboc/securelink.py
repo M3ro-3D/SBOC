@@ -16,6 +16,10 @@ def derive(shared, code, salt): return HKDF(algorithm=hashes.SHA256(),length=32,
 from cryptography.hazmat.primitives import hashes
 
 def pub(priv): return priv.public_key().public_bytes(Encoding.Raw,PublicFormat.Raw)
+def endpoint(host, port, path):
+    # Bracket IPv6 literals when constructing URLs.
+    return f'http://[{host}]:{port}{path}' if ":" in host else f'http://{host}:{port}{path}'
+
 def request(url, obj):
     data=canonical(obj)
     with lan_urlopen(Request(url,data=data,headers={'Content-Type':'application/json'},method='POST'),timeout=6) as r:
@@ -24,13 +28,13 @@ def request(url, obj):
 def pair(host,port,code):
     if not isinstance(code,str) or len(code)!=6 or not code.isascii() or not code.isdigit(): raise ValueError('Sechsstelligen Kopplungscode eingeben')
     private=X25519PrivateKey.generate(); cp=pub(private); challenge=secrets.token_bytes(16)
-    a=request(f'http://{host}:{port}/pair/start',{'public':B(cp),'challenge':B(challenge)})
+    a=request(endpoint(host,port,'/pair/start'),{'public':B(cp),'challenge':B(challenge)})
     ap=U(a['public']); salt=U(a['salt']); ident=a['id']; ticket=a['ticket']
     key=derive(private.exchange(X25519PublicKey.from_public_bytes(ap)),code,salt)
     transcript=b'SBOC-pair-v1'+cp+ap+challenge+salt+ident.encode()
     if not hmac.compare_digest(U(a['proof']),mac(key,b'agent'+transcript)):raise ValueError('Kopplungscode falsch oder Agent nicht vertrauenswürdig')
     proof=B(mac(key,b'controller'+transcript))
-    r=request(f'http://{host}:{port}/pair/finish',{'ticket':ticket,'proof':proof})
+    r=request(endpoint(host,port,'/pair/finish'),{'ticket':ticket,'proof':proof})
     if not r.get('ok'):raise ValueError('Kopplung fehlgeschlagen')
     return ident,key
 
@@ -38,7 +42,7 @@ def secure_request(host,port,key,path,query=None):
     nonce=os.urandom(12)
     body=canonical({'path':path,'query':query or {}})
     payload={'nonce':B(nonce),'data':B(AESGCM(key).encrypt(nonce,body,b'SBOC-request-v1'))}
-    r=request(f'http://{host}:{port}/secure',payload)
+    r=request(endpoint(host,port,'/secure'),payload)
     reply=json.loads(AESGCM(key).decrypt(U(r['nonce']),U(r['data']),b'SBOC-response-v1'+nonce))
     return reply
 
